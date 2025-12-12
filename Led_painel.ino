@@ -1,4 +1,4 @@
-//==== PAINEL LED WI-FI – GRAXAIM BOTS ====//
+//==== PAINEL LED WI-FI – GRAXAIM BOTS + OTA ====//
 
 #include <WiFi.h>
 #include <WebServer.h>
@@ -7,6 +7,8 @@
 #include <MD_Parola.h>
 #include <MD_MAX72XX.h>
 #include <SPI.h>
+
+#include <ArduinoOTA.h>   // <<< ADICIONADO
 
 // ======== DISPLAY CONFIG ======== //
 #define HARDWARE_TYPE MD_MAX72XX::FC16_HW
@@ -266,6 +268,26 @@ void setup() {
   Serial.print("IP: ");
   Serial.println(WiFi.localIP());
 
+  // ------ OTA CONFIGURADO AQUI ------ //
+  ArduinoOTA.setHostname("painel_led_ota");
+
+  ArduinoOTA
+    .onStart([]() {
+      Serial.println("Iniciando OTA...");
+    })
+    .onEnd([]() {
+      Serial.println("OTA Concluído!");
+    })
+    .onProgress([](unsigned int progress, unsigned int total) {
+      Serial.printf("Progresso: %u%%\r", (progress * 100) / total);
+    })
+    .onError([](ota_error_t error) {
+      Serial.printf("Erro OTA [%u]\n", error);
+    });
+
+  ArduinoOTA.begin();
+  // --------------------------------- //
+
   server.on("/", [](){ server.send(200, "text/html", htmlPage()); });
   server.on("/set", handleSet);
   server.on("/on", handleOn);
@@ -280,6 +302,8 @@ void setup() {
 //=================================================================
 void loop() {
   server.handleClient();
+
+  ArduinoOTA.handle();   // <<< ESSENCIAL PARA ATUALIZAÇÃO OTA
 
   if (painelLigado) {
     if (display.displayAnimate()) {
