@@ -20,19 +20,19 @@
 
 MD_Parola display = MD_Parola(HARDWARE_TYPE, DATA_PIN, CLK_PIN, CS_PIN, MAX_DEVICES);
 
+// ======== Wi-Fi ======== //
+const char* ssid = "GRAXAIM";
+const char* password = "ifsul2025";
+
 // ======== NTP CLOCK ======== //
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org", -10800, 60000);
-
-// ======== AP MODE ======== //
-const char* APssid = "Painel_led";
-const char* APpass = "12345678";
+NTPClient timeClient(ntpUDP, "pool.ntp.org", -10800, 60000); // UTC-3
 
 // ======== VARIABLES ======== //
 String texto = "Graxaim Bots";
 int animacaoID = 0;
 
-// mapa de animações válidas do Parola
+// Lista de efeitos válidos do Parola
 textEffect_t efeitos[] = {
   PA_PRINT,
   PA_SCROLL_LEFT,
@@ -62,7 +62,7 @@ void iniciarAnimacaoTexto() {
     texto.c_str(),
     PA_CENTER,
     50,
-    2000,
+    1000,
     efeito,
     efeito
   );
@@ -73,21 +73,18 @@ void iniciarAnimacaoTexto() {
 //=================================================================
 String getHora() {
   timeClient.update();
-  int h = timeClient.getHours();
-  int m = timeClient.getMinutes();
-
   char buf[6];
-  sprintf(buf, "%02d:%02d", h, m);
+  sprintf(buf, "%02d:%02d", timeClient.getHours(), timeClient.getMinutes());
   return String(buf);
 }
 
 void animarHora() {
   String hora = getHora();
-  display.displayText(hora.c_str(), PA_CENTER, 50, 1000, PA_SCROLL_LEFT, PA_SCROLL_LEFT);
+  display.displayText(hora.c_str(), PA_CENTER, 50, 1500, PA_SCROLL_LEFT, PA_SCROLL_LEFT);
 }
 
 //=================================================================
-// TEMPERATURA (FAKE — coloque sensor depois)
+// TEMPERATURA (FAKE)
 //=================================================================
 String getTemp() {
   return "25C";
@@ -197,10 +194,18 @@ void setup() {
   display.setIntensity(5);
   display.displayClear();
 
-  // AP WiFi
-  WiFi.softAP(APssid, APpass);
-  Serial.print("AP Iniciado! IP: ");
-  Serial.println(WiFi.softAPIP());
+  // Wi-Fi
+  WiFi.begin(ssid, password);
+  Serial.println("Conectando ao Wi-Fi...");
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("\nWI-FI CONECTADO!");
+  Serial.print("IP: ");
+  Serial.println(WiFi.localIP());
 
   timeClient.begin();
 
