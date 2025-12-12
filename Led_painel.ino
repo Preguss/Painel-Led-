@@ -13,7 +13,6 @@
 #define CLK_PIN   18
 #define DATA_PIN  23
 #define CS_PIN     5
-
 #define MAX_DEVICES 8
 
 MD_Parola display = MD_Parola(HARDWARE_TYPE, DATA_PIN, CLK_PIN, CS_PIN, MAX_DEVICES);
@@ -25,59 +24,62 @@ const char* password = "ifsul2025";
 // ======== Web Server ======== //
 WebServer server(80);
 
-bool animacaoAtivada = false;
+// VARIÁVEIS CONTROLADAS PELO SITE
+String textoPainel = "Graxaim Bots";
+uint8_t animacao = PA_SCROLL_LEFT;  // animação padrão
+bool animacaoRodando = false;
 
-// ======== ANIMAÇÃO ======== //
+// ======== EXIBIR TEXTO ======== //
 void iniciarAnimacao() {
   display.displayText(
-      "Graxaim Bots",
+      textoPainel.c_str(),
       PA_CENTER,
-      50,
-      2000,
-      PA_PRINT,
-      PA_FADE
+      40,
+      1000,
+      animacao,
+      animacao
   );
 }
 
 // ======== HTML DO SITE ======== //
 String paginaHTML() {
+
   String html = R"=====(
 <!DOCTYPE html>
 <html>
 <head>
 <title>Graxaim Bots - Painel LED</title>
 <style>
-body {
-  background-color: #111;
-  color: white;
-  font-family: Arial;
-  text-align: center;
-  margin-top: 50px;
-}
-button {
-  padding: 20px;
-  font-size: 22px;
-  margin: 15px;
-  border-radius: 10px;
-  cursor: pointer;
-  border: none;
-  width: 220px;
-}
-.ligar { background-color: #1abc9c; color: black; }
-.desligar { background-color: #e74c3c; color: white; }
+body { background:#111; color:white; font-family:Arial; text-align:center; margin-top:40px; }
+input, select { padding:12px; width:300px; font-size:20px; border-radius:10px; margin-top:10px; }
+button { padding:15px; font-size:20px; border-radius:10px; margin-top:20px; width:250px; cursor:pointer; }
+.enviar { background:#1abc9c; border:none; }
 </style>
 </head>
 <body>
-<h1>Graxaim Bots - Controle do Display</h1>
-<h2>Estado atual: )=====";
 
-  html += (animacaoAtivada ? "ATIVADO" : "DESATIVADO");
+<h1>Controle do Painel LED</h1>
 
-  html += R"=====(
-</h2>
+<form action="/set" method="GET">
+  <h2>Texto:</h2>
+  <input type="text" name="txt" placeholder="Digite o texto" value=")=====";
 
-<button class="ligar" onclick="location.href='/ligar'">LIGAR</button>
-<button class="desligar" onclick="location.href='/desligar'">DESLIGAR</button>
+  html += textoPainel;
+  html += R"=====(">
+
+  <h2>Animação:</h2>
+  <select name="anim">
+    <option value="0">Scroll Left</option>
+    <option value="1">Scroll Right</option>
+    <option value="2">Fade</option>
+    <option value="3">Print</option>
+    <option value="4">Blink</option>
+    <option value="5">Open</option>
+  </select>
+
+  <br><br>
+  <button class="enviar" type="submit">ATUALIZAR</button>
+</form>
 
 </body>
 </html>
@@ -86,20 +88,34 @@ button {
   return html;
 }
 
-// ======== HANDLERS DO SERVIDOR ======== //
+// ======== ROTAS ======== //
 void handleRoot() {
   server.send(200, "text/html", paginaHTML());
 }
 
-void handleLigar() {
-  animacaoAtivada = true;
-  iniciarAnimacao();
-  server.send(200, "text/html", paginaHTML());
-}
+void handleSet() {
+  
+  // pega texto enviado
+  if (server.hasArg("txt")) {
+    textoPainel = server.arg("txt");
+  }
 
-void handleDesligar() {
-  animacaoAtivada = false;
-  display.displayClear();
+  // pega animação escolhida
+  if (server.hasArg("anim")) {
+    int mode = server.arg("anim").toInt();
+    switch (mode) {
+      case 0: animacao = PA_SCROLL_LEFT; break;
+      case 1: animacao = PA_SCROLL_RIGHT; break;
+      case 2: animacao = PA_FADE; break;
+      case 3: animacao = PA_PRINT; break;
+      case 4: animacao = PA_BLINK; break;
+      case 5: animacao = PA_OPENING; break;
+    }
+  }
+
+  animacaoRodando = true;
+  iniciarAnimacao();
+
   server.send(200, "text/html", paginaHTML());
 }
 
@@ -107,7 +123,6 @@ void handleDesligar() {
 void setup() {
   Serial.begin(115200);
 
-  // ---- WiFi ---- //
   WiFi.begin(ssid, password);
   Serial.println("Conectando ao Wi-Fi...");
 
@@ -117,18 +132,17 @@ void setup() {
   }
 
   Serial.println("\nWi-Fi conectado!");
-  Serial.print("Acesse no navegador: http://");
+  Serial.print("Acesse: http://");
   Serial.println(WiFi.localIP());
 
-  // ---- Display ---- //
+  // Display
   display.begin();
   display.setIntensity(4);
   display.displayClear();
 
-  // ---- Rotas ---- //
+  // Rotas
   server.on("/", handleRoot);
-  server.on("/ligar", handleLigar);
-  server.on("/desligar", handleDesligar);
+  server.on("/set", handleSet);
 
   server.begin();
   Serial.println("Servidor iniciado!");
@@ -138,7 +152,7 @@ void setup() {
 void loop() {
   server.handleClient();
 
-  if (animacaoAtivada) {
+  if (animacaoRodando) {
     if (display.displayAnimate()) {
       display.displayReset();
     }
