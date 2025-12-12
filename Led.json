@@ -1,3 +1,10 @@
 {
-  "mostrar": 1
+  "mostrar": 1,
+  "texto": "Graxaim Bots",
+  "brilho": 5,
+  "velocidade": 50,
+  "pausa": 2000,
+  "efeito_entrada": "PRINT",
+  "efeito_saida": "FADE",
+  "repetir": 1
 }
