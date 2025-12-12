@@ -1,8 +1,7 @@
 //==== GRAXAIM BOTS LED DISPLAY WIFI ====//
 
 #include <WiFi.h>
-#include <HTTPClient.h>
-#include <ArduinoJson.h>
+#include <WebServer.h>
 
 #include <MD_Parola.h>
 #include <MD_MAX72XX.h>
@@ -23,87 +22,125 @@ MD_Parola display = MD_Parola(HARDWARE_TYPE, DATA_PIN, CLK_PIN, CS_PIN, MAX_DEVI
 const char* ssid = "GRAXAIM";
 const char* password = "ifsul2025";
 
-// ======== URL DO JSON ======== //
-String url = "https://github.com/Preguss/Painel-Led-/blob/a3d28e06c206543223c4a7983a4c521ce21ea1b1/Led.json";
+// ======== Web Server ======== //
+WebServer server(80);
 
-// Variável de controle
-int mostrarTexto = 0;  
 bool animacaoAtivada = false;
 
+// ======== ANIMAÇÃO ======== //
 void iniciarAnimacao() {
   display.displayText(
-      "Graxaim Bots",     // Texto
-      PA_CENTER,          // Centralizado
-      50,                 // Velocidade
-      2000,               // Espera 2 segundos
-      PA_PRINT,           // Entrada: aparece
-      PA_FADE             // Saída: diminui
+      "Graxaim Bots",
+      PA_CENTER,
+      50,
+      2000,
+      PA_PRINT,
+      PA_FADE
   );
 }
 
+// ======== HTML DO SITE ======== //
+String paginaHTML() {
+  String html = R"=====(
+<!DOCTYPE html>
+<html>
+<head>
+<title>Graxaim Bots - Painel LED</title>
+<style>
+body {
+  background-color: #111;
+  color: white;
+  font-family: Arial;
+  text-align: center;
+  margin-top: 50px;
+}
+button {
+  padding: 20px;
+  font-size: 22px;
+  margin: 15px;
+  border-radius: 10px;
+  cursor: pointer;
+  border: none;
+  width: 220px;
+}
+.ligar { background-color: #1abc9c; color: black; }
+.desligar { background-color: #e74c3c; color: white; }
+</style>
+</head>
+<body>
+<h1>Graxaim Bots - Controle do Display</h1>
+<h2>Estado atual: )=====";
+
+  html += (animacaoAtivada ? "ATIVADO" : "DESATIVADO");
+
+  html += R"=====(
+</h2>
+
+<button class="ligar" onclick="location.href='/ligar'">LIGAR</button>
+<button class="desligar" onclick="location.href='/desligar'">DESLIGAR</button>
+
+</body>
+</html>
+)=====";
+
+  return html;
+}
+
+// ======== HANDLERS DO SERVIDOR ======== //
+void handleRoot() {
+  server.send(200, "text/html", paginaHTML());
+}
+
+void handleLigar() {
+  animacaoAtivada = true;
+  iniciarAnimacao();
+  server.send(200, "text/html", paginaHTML());
+}
+
+void handleDesligar() {
+  animacaoAtivada = false;
+  display.displayClear();
+  server.send(200, "text/html", paginaHTML());
+}
+
+// ======== SETUP ======== //
 void setup() {
   Serial.begin(115200);
 
-  // ---- Conexão ao Wi-Fi ---- //
+  // ---- WiFi ---- //
   WiFi.begin(ssid, password);
   Serial.println("Conectando ao Wi-Fi...");
 
   while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println("Tentando conectar...");
+    delay(500);
+    Serial.print(".");
   }
 
-  Serial.println("Wi-Fi conectado!");
+  Serial.println("\nWi-Fi conectado!");
+  Serial.print("Acesse no navegador: http://");
+  Serial.println(WiFi.localIP());
 
-  // ---- Iniciar display ---- //
+  // ---- Display ---- //
   display.begin();
   display.setIntensity(4);
   display.displayClear();
+
+  // ---- Rotas ---- //
+  server.on("/", handleRoot);
+  server.on("/ligar", handleLigar);
+  server.on("/desligar", handleDesligar);
+
+  server.begin();
+  Serial.println("Servidor iniciado!");
 }
 
+// ======== LOOP ======== //
 void loop() {
+  server.handleClient();
 
-  // ======== Ler JSON do GitHub ======== //
-  if (WiFi.status() == WL_CONNECTED) {
-
-    HTTPClient http;
-    http.begin(url);
-    int httpCode = http.GET();
-
-    if (httpCode == HTTP_CODE_OK) {
-      String payload = http.getString();
-
-      DynamicJsonDocument doc(1024);
-      deserializeJson(doc, payload);
-
-      // Ler comando do JSON
-      mostrarTexto = doc["mostrar"];   // 1 = ligar animação || 0 = desligar
-
-    } else {
-      Serial.println("Erro ao acessar JSON");
-    }
-
-    http.end();
-  }
-
-  // ======== Controle do Display ======== //
-
-  if (mostrarTexto == 1 && !animacaoAtivada) {
-    iniciarAnimacao();
-    animacaoAtivada = true;
-  }
-
-  if (mostrarTexto == 0) {
-    display.displayClear();
-    animacaoAtivada = false;
-  }
-
-  // Atualizar animação
   if (animacaoAtivada) {
     if (display.displayAnimate()) {
-      display.displayReset();   // repete
+      display.displayReset();
     }
   }
-
-  delay(3000); // Atualiza a cada 3 segundos
 }
