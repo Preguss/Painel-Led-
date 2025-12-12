@@ -8,9 +8,6 @@
 #include <MD_MAX72XX.h>
 #include <SPI.h>
 
-#include <NTPClient.h>
-#include <WiFiUdp.h>
-
 // ======== DISPLAY CONFIG ======== //
 #define HARDWARE_TYPE MD_MAX72XX::FC16_HW
 #define CLK_PIN   18
@@ -24,15 +21,16 @@ MD_Parola display = MD_Parola(HARDWARE_TYPE, DATA_PIN, CLK_PIN, CS_PIN, MAX_DEVI
 const char* ssid = "GRAXAIM";
 const char* password = "ifsul2025";
 
-// ======== NTP CLOCK ======== //
-WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org", -10800, 60000); // UTC-3
-
-// ======== VARIABLES ======== //
+// ======== VARIÁVEIS ======== //
 String texto = "Graxaim Bots";
 int animacaoID = 0;
 
-// Lista de efeitos válidos do Parola
+// tempos configuráveis (em segundos)
+int tEntrada = 1;
+int tPausa   = 1;
+int tSaida   = 1;
+
+// Lista de efeitos válidos
 textEffect_t efeitos[] = {
   PA_PRINT,
   PA_SCROLL_LEFT,
@@ -49,6 +47,23 @@ textEffect_t efeitos[] = {
   PA_GROW_DOWN
 };
 
+// Nomes bonitos das animações
+String nomesAnim[] = {
+  "Aparecer",
+  "Rolar para Esquerda",
+  "Rolar para Direita",
+  "Rolar para Cima",
+  "Rolar para Baixo",
+  "Desvanecer",
+  "Cortinas",
+  "Wipe",
+  "Wipe com Cursor",
+  "Abrir",
+  "Fechar",
+  "Crescer para Cima",
+  "Crescer para Baixo"
+};
+
 // Webserver
 WebServer server(80);
 
@@ -56,48 +71,33 @@ WebServer server(80);
 // FUNÇÃO: INICIA ANIMAÇÃO DE TEXTO
 //=================================================================
 void iniciarAnimacaoTexto() {
+  
+  int speedEntrada = tEntrada * 20;   
+  int speedSaida   = tSaida   * 20;
+  int pausaMS      = tPausa * 1000;
+
   textEffect_t efeito = efeitos[animacaoID];
 
   display.displayText(
     texto.c_str(),
     PA_CENTER,
-    50,
-    1000,
+    speedEntrada,
+    pausaMS,
     efeito,
     efeito
   );
 }
 
 //=================================================================
-// MOSTRAR HORA
-//=================================================================
-String getHora() {
-  timeClient.update();
-  char buf[6];
-  sprintf(buf, "%02d:%02d", timeClient.getHours(), timeClient.getMinutes());
-  return String(buf);
-}
-
-void animarHora() {
-  String hora = getHora();
-  display.displayText(hora.c_str(), PA_CENTER, 50, 1500, PA_SCROLL_LEFT, PA_SCROLL_LEFT);
-}
-
-//=================================================================
-// TEMPERATURA (FAKE)
-//=================================================================
-String getTemp() {
-  return "25C";
-}
-
-void animarTemp() {
-  display.displayText("Temp: 25C", PA_CENTER, 50, 1500, PA_SCROLL_LEFT, PA_SCROLL_LEFT);
-}
-
-//=================================================================
-// WEBPAGE HTML
+// HTML DO SITE
 //=================================================================
 String htmlPage() {
+
+  String animOps = "";
+  for (int i = 0; i < 13; i++) {
+    animOps += "<option value='" + String(i) + "'>" + nomesAnim[i] + "</option>";
+  }
+
   String page = R"rawliteral(
 <!DOCTYPE html>
 <html>
@@ -111,75 +111,50 @@ input, select, button { font-size:20px; padding:8px; margin:10px; }
 </head>
 <body>
 
-<h1>PAINEL LED - GRAXAIM BOTS</h1>
+<h1>Painel LED - Graxaim Bots</h1>
 
 <form action="/set">
+
   <label>Texto:</label><br>
-  <input name="txt" value="Graxaim Bots"><br>
+  <input name="txt" value=")rawliteral" + texto + R"rawliteral("><br>
 
   <label>Animação:</label><br>
-  <select name="anim">
-    <option value="0">PRINT</option>
-    <option value="1">SCROLL LEFT</option>
-    <option value="2">SCROLL RIGHT</option>
-    <option value="3">SCROLL UP</option>
-    <option value="4">SCROLL DOWN</option>
-    <option value="5">FADE</option>
-    <option value="6">BLINDS</option>
-    <option value="7">WIPE</option>
-    <option value="8">WIPE CURSOR</option>
-    <option value="9">OPENING</option>
-    <option value="10">CLOSING</option>
-    <option value="11">GROW UP</option>
-    <option value="12">GROW DOWN</option>
-  </select><br>
+  <select name="anim">)rawliteral" + animOps + R"rawliteral(</select><br>
 
-  <button type="submit">Mostrar Texto</button>
+  <label>Tempo Entrada (segundos):</label><br>
+  <input name="entrada" type="number" value="1"><br>
+
+  <label>Pausa (segundos):</label><br>
+  <input name="pausa" type="number" value="1"><br>
+
+  <label>Tempo Saída (segundos):</label><br>
+  <input name="saida" type="number" value="1"><br>
+
+  <button type="submit">Aplicar</button>
+
 </form>
-
-<hr>
-
-<button onclick="location.href='/hora'">Mostrar Hora</button>
-<button onclick="location.href='/temp'">Mostrar Temp</button>
-<button onclick="location.href='/sequencia'">Executar Sequência Completa</button>
 
 </body>
 </html>
 )rawliteral";
+
   return page;
 }
 
 //=================================================================
-// HANDLER PARA SETAR TEXTO E ANIMAÇÃO
+// HANDLER DO BOTÃO “APLICAR”
 //=================================================================
 void handleSet() {
+
   if (server.hasArg("txt")) texto = server.arg("txt");
   if (server.hasArg("anim")) animacaoID = server.arg("anim").toInt();
 
+  if (server.hasArg("entrada")) tEntrada = server.arg("entrada").toInt();
+  if (server.hasArg("pausa"))   tPausa   = server.arg("pausa").toInt();
+  if (server.hasArg("saida"))   tSaida   = server.arg("saida").toInt();
+
   iniciarAnimacaoTexto();
 
-  server.send(200, "text/html", htmlPage());
-}
-
-//=================================================================
-// HANDLERS EXTRAS
-//=================================================================
-void handleHora() {
-  animarHora();
-  server.send(200, "text/html", htmlPage());
-}
-
-void handleTemp() {
-  animarTemp();
-  server.send(200, "text/html", htmlPage());
-}
-
-void handleSequencia() {
-  iniciarAnimacaoTexto();
-  delay(3000);
-  animarHora();
-  delay(3000);
-  animarTemp();
   server.send(200, "text/html", htmlPage());
 }
 
@@ -189,12 +164,10 @@ void handleSequencia() {
 void setup() {
   Serial.begin(115200);
 
-  // Display
   display.begin();
   display.setIntensity(5);
   display.displayClear();
 
-  // Wi-Fi
   WiFi.begin(ssid, password);
   Serial.println("Conectando ao Wi-Fi...");
 
@@ -207,22 +180,16 @@ void setup() {
   Serial.print("IP: ");
   Serial.println(WiFi.localIP());
 
-  timeClient.begin();
-
-  // Rotas
   server.on("/", [](){ server.send(200, "text/html", htmlPage()); });
   server.on("/set", handleSet);
-  server.on("/hora", handleHora);
-  server.on("/temp", handleTemp);
-  server.on("/sequencia", handleSequencia);
-
   server.begin();
 }
 
 //=================================================================
-// LOOP
+// LOOP PRINCIPAL
 //=================================================================
 void loop() {
+
   server.handleClient();
 
   if (display.displayAnimate()) {
